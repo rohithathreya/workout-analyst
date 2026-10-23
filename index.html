@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>PROTOCOL 90 // High-Density Recomp & APT System</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="ambient-glow"></div>
+
+  <!-- Top App Header -->
+  <header class="top-header">
+    <div class="brand-row">
+      <div>
+        <span class="eyebrow">CULT ELITE // 178CM • 93KG RECOMP</span>
+        <h1 class="app-title">PROTOCOL <span>90</span></h1>
+      </div>
+      <div class="mode-toggle-wrap">
+        <span class="mode-label" id="modeLabel">WEEK 2+ SAVAGE</span>
+        <button class="mode-switch active" id="intensityToggle" aria-label="Toggle Week 1 vs Week 2+ Intensity">
+          <span class="switch-knob"></span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Daily Macro & Session Status Strip -->
+    <div class="metrics-strip">
+      <div class="metric-pill">
+        <span class="metric-key">CLOCK</span>
+        <span class="metric-val">90 MIN</span>
+      </div>
+      <div class="metric-pill">
+        <span class="metric-key">PROTEIN</span>
+        <span class="metric-val">160–170g</span>
+      </div>
+      <div class="metric-pill">
+        <span class="metric-key">DEFICIT</span>
+        <span class="metric-val">-600 KCAL</span>
+      </div>
+      <div class="metric-pill progress-pill">
+        <span class="metric-key">DONE</span>
+        <span class="metric-val" id="dayProgressText">0%</span>
+      </div>
+    </div>
+
+    <!-- 7-Day Selector Navigation -->
+    <nav class="day-selector" id="daySelector" aria-label="Workout Days"></nav>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="main-container">
+    <!-- Active Day Hero Banner -->
+    <section class="day-hero" id="dayHero"></section>
+
+    <!-- 4-Phase Filter Tabs -->
+    <div class="phase-tabs" id="phaseTabs">
+      <button class="phase-tab active" data-phase="all">All Phases (90m)</button>
+      <button class="phase-tab" data-phase="phase1">1. APT Prep (15m)</button>
+      <button class="phase-tab" data-phase="phase2">2. Hypertrophy (45m)</button>
+      <button class="phase-tab" data-phase="phase3">3. KB Control (10m)</button>
+      <button class="phase-tab" data-phase="phase4">4. Cardio (20m)</button>
+    </div>
+
+    <!-- Dynamic Workout Phases & Exercise Cards -->
+    <div id="workoutContainer" class="workout-container"></div>
+  </main>
+
+  <!-- Floating Rest Timer Bar -->
+  <div class="timer-dock" id="timerDock">
+    <div class="timer-display-group">
+      <div class="timer-ring-indicator" id="timerPulse"></div>
+      <div>
+        <div class="timer-caption">REST TIMER</div>
+        <div class="timer-clock" id="timerClock">00:00</div>
+      </div>
+    </div>
+    <div class="timer-Controls">
+      <button class="timer-btn" data-sec="30">30s</button>
+      <button class="timer-btn" data-sec="45">45s</button>
+      <button class="timer-btn" data-sec="60">60s</button>
+      <button class="timer-btn" data-sec="90">90s</button>
+      <button class="timer-btn stop-btn" id="timerStopBtn" title="Reset Timer">✕</button>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
