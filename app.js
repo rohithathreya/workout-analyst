@@ -860,324 +860,538 @@ const WORKOUT_DAYS = [
 ];
 
 const PHASE_META = {
-  phase1: { time: "00–15 MIN", title: "Phase 1: APT & Mobility Reset", sub: "Stack ribs over pelvis and unlock hip flexors before touching iron" },
-  phase2: { time: "15–60 MIN", title: "Phase 2: High-Density Paired Supersets", sub: "Alternate A1/A2, B1/B2, C1/C2 so one muscle works while the other recovers" },
-  phase3: { time: "60–70 MIN", title: "Phase 3: Kettlebell & Bodyweight Control", sub: "Bridge raw hypertrophy into anti-rotational core and dynamic glute power" },
-  phase4: { time: "70–90 MIN", title: "Phase 4: Polarized Cardio Engine", sub: "Zone 2 aerobic base on Push/Pull days; VO2 Max HIIT on Leg days" }
+  phase1: { time: "00–15", title: "APT & Mobility", sub: "Stack ribs over pelvis before you touch iron" },
+  phase2: { time: "15–60", title: "Paired Supersets", sub: "A1/A2, B1/B2, C1/C2 — one pattern works while the other rests" },
+  phase3: { time: "60–70", title: "KB Control", sub: "Carries, planks, and hip snap before the engine work" },
+  phase4: { time: "70–90", title: "Cardio Engine", sub: "Zone 2 on push and pull days. Intervals on leg days" }
 };
 
-// State Management
-let state = {
-  selectedDay: 1,
-  selectedPhase: "all",
-  savageMode: true, // Week 2+ intensifiers enabled by default
-  completedSets: JSON.parse(localStorage.getItem("protocol90_sets") || "{}"),
-  loggedWeights: JSON.parse(localStorage.getItem("protocol90_weights") || "{}")
+const CHIP_TITLES = {
+  1: "Push A",
+  2: "Pull A",
+  3: "Legs A",
+  4: "Push B",
+  5: "Pull B",
+  6: "Legs B",
+  7: "Reset"
 };
 
-// Rest Timer State
-let timerInterval = null;
-let remainingSeconds = 0;
+const DAY_NAMES = ["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const FEELINGS = ["Crushed it", "Solid", "Grind", "Form focus", "Low energy", "PR territory"];
 
-function initApp() {
-  // Default to current weekday (Mon=1 ... Sun=7)
+function todayNumber() {
   const jsDay = new Date().getDay();
-  state.selectedDay = jsDay === 0 ? 7 : jsDay;
-
-  renderDaySelector();
-  bindStaticEvents();
-  renderCurrentDay();
+  return jsDay === 0 ? 7 : jsDay;
 }
 
-function saveState() {
-  localStorage.setItem("protocol90_sets", JSON.stringify(state.completedSets));
-  localStorage.setItem("protocol90_weights", JSON.stringify(state.loggedWeights));
-}
-
-function renderDaySelector() {
-  const nav = document.getElementById("daySelector");
-  nav.innerHTML = WORKOUT_DAYS.map(d => `
-    <button class="day-btn ${d.dayNumber === state.selectedDay ? "active" : ""}" data-day="${d.dayNumber}">
-      <div class="day-btn-top">
-        <span>DAY ${d.dayNumber}</span>
-        <span>${d.shortDay}</span>
-      </div>
-      <div class="day-btn-title">${d.title.split("+")[0].trim()}</div>
-    </button>
-  `).join("");
-
-  nav.querySelectorAll(".day-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      state.selectedDay = Number(btn.dataset.day);
-      renderDaySelector();
-      renderCurrentDay();
-    });
-  });
-}
-
-function renderCurrentDay() {
-  const dayObj = WORKOUT_DAYS.find(d => d.dayNumber === state.selectedDay);
-  const hero = document.getElementById("dayHero");
-
-  hero.innerHTML = `
-    <div>
-      <span class="day-hero-badge">DAY ${dayObj.dayNumber} // ${dayObj.shortDay}</span>
-      <h2>${dayObj.title}</h2>
-      <p>${dayObj.summary}</p>
-    </div>
-    <button class="reset-day-btn" id="resetDayBtn">Reset Day Checkmarks</button>
-  `;
-
-  document.getElementById("resetDayBtn").addEventListener("click", () => {
-    Object.keys(dayObj.phases).forEach(pk => {
-      dayObj.phases[pk].forEach(ex => {
-        delete state.completedSets[`d${dayObj.dayNumber}_${ex.id}`];
-      });
-    });
-    saveState();
-    renderCurrentDay();
-  });
-
-  const container = document.getElementById("workoutContainer");
-  container.innerHTML = "";
-
-  const phaseKeys = state.selectedPhase === "all"
-    ? ["phase1", "phase2", "phase3", "phase4"]
-    : [state.selectedPhase];
-
-  phaseKeys.forEach(pk => {
-    const exercises = dayObj.phases[pk] || [];
-    if (!exercises.length) return;
-
-    const meta = PHASE_META[pk];
-    const section = document.createElement("section");
-    section.className = "phase-section";
-
-    section.innerHTML = `
-      <div class="phase-header">
-        <div class="phase-title-group">
-          <span class="phase-time-tag">${meta.time}</span>
-          <h3 class="phase-title">${meta.title}</h3>
-        </div>
-        <span class="phase-subtitle">${meta.sub}</span>
-      </div>
-      <div class="cards-grid">
-        ${exercises.map(ex => renderExerciseCard(dayObj.dayNumber, ex)).join("")}
-      </div>
-    `;
-
-    container.appendChild(section);
-  });
-
-  bindCardEvents(dayObj.dayNumber);
-  updateDayProgress(dayObj);
-}
-
-function renderExerciseCard(dayNum, ex) {
-  const storageKey = `d${dayNum}_${ex.id}`;
-  const doneArr = state.completedSets[storageKey] || [];
-  const savedWeight = state.loggedWeights[storageKey] || "";
-  const allSetsDone = doneArr.length >= ex.sets;
-
-  const setButtonsHtml = Array.from({ length: ex.sets }, (_, i) => {
-    const setIndex = i + 1;
-    const isDone = doneArr.includes(setIndex);
-    return `<button class="set-pill ${isDone ? "done" : ""}" data-key="${storageKey}" data-set="${setIndex}" data-rest="${ex.rest}">S${setIndex}</button>`;
-  }).join("");
-
-  const intensifierText = state.savageMode
-    ? `<strong>🔥 WEEK 2+ SAVAGE INTENSIFIER</strong>${ex.intensifier}`
-    : `<strong>🛡️ WEEK 1 BASE ADAPTATION</strong>Stop 1–2 reps shy of failure with clean form. Save final-set intensifiers for Week 2.`;
-
-  const ytQuery = encodeURIComponent(`${ex.name} exercise form tutorial`);
-
-  return `
-    <article class="exercise-card ${allSetsDone ? "card-completed" : ""}" id="card-${storageKey}">
-      <div class="card-media">
-        <img src="${ex.img}" alt="${ex.name}" loading="lazy" />
-        <div class="card-media-overlay"></div>
-        <span class="superset-badge">${ex.code}</span>
-        <a class="video-demo-link" href="https://www.youtube.com/results?search_query=${ytQuery}" target="_blank" rel="noopener">▶ Form Video</a>
-        <div class="card-title-overlay">
-          <div class="muscle-tag">${ex.muscle}</div>
-          <h4 class="exercise-name">${ex.name}</h4>
-        </div>
-      </div>
-
-      <div class="card-body">
-        <div class="prescription-bar">
-          <div class="rx-item">
-            <span class="rx-label">SETS × REPS</span>
-            <span class="rx-value">${ex.sets} × ${ex.reps}</span>
-          </div>
-          <div class="rx-item">
-            <span class="rx-label">TEMPO</span>
-            <span class="rx-value">${ex.tempo}</span>
-          </div>
-          <div class="rx-item">
-            <span class="rx-label">REST</span>
-            <span class="rx-value">${ex.rest > 0 ? ex.rest + "s" : "CONT."}</span>
-          </div>
-        </div>
-
-        <p class="directive-text">${ex.directive}</p>
-
-        <div class="apt-callout">
-          <strong>🎯 PELVIC / APT LOCK</strong>
-          ${ex.aptCue}
-        </div>
-
-        <div class="intensifier-callout ${state.savageMode ? "" : "week1-muted"}">
-          ${intensifierText}
-        </div>
-
-        <div class="card-footer">
-          <div class="set-pills">${setButtonsHtml}</div>
-          <input type="text" class="load-input" placeholder="kg / pin" value="${savedWeight}" data-weight-key="${storageKey}" aria-label="Log weight for ${ex.name}" />
-        </div>
-      </div>
-    </article>
-  `;
-}
-
-function bindCardEvents(dayNum) {
-  const dayObj = WORKOUT_DAYS.find(d => d.dayNumber === dayNum);
-
-  document.querySelectorAll(".set-pill").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const key = btn.dataset.key;
-      const setNum = Number(btn.dataset.set);
-      const restSec = Number(btn.dataset.rest);
-
-      if (!state.completedSets[key]) state.completedSets[key] = [];
-      const idx = state.completedSets[key].indexOf(setNum);
-
-      if (idx > -1) {
-        state.completedSets[key].splice(idx, 1);
-        btn.classList.remove("done");
-      } else {
-        state.completedSets[key].push(setNum);
-        btn.classList.add("done");
-        if (restSec > 0) startRestTimer(restSec);
-      }
-
-      saveState();
-      updateDayProgress(dayObj);
-
-      // Highlight card if all sets complete
-      const card = document.getElementById(`card-${key}`);
-      const totalPills = card.querySelectorAll(".set-pill").length;
-      if (state.completedSets[key].length >= totalPills) {
-        card.classList.add("card-completed");
-      } else {
-        card.classList.remove("card-completed");
-      }
-    });
-  });
-
-  document.querySelectorAll(".load-input").forEach(input => {
-    input.addEventListener("input", () => {
-      state.loggedWeights[input.dataset.weightKey] = input.value;
-      saveState();
-    });
-  });
-}
-
-function updateDayProgress(dayObj) {
-  let totalSets = 0;
-  let completed = 0;
-
-  Object.keys(dayObj.phases).forEach(pk => {
-    dayObj.phases[pk].forEach(ex => {
-      totalSets += ex.sets;
-      const doneArr = state.completedSets[`d${dayObj.dayNumber}_${ex.id}`] || [];
-      completed += Math.min(doneArr.length, ex.sets);
-    });
-  });
-
-  const pct = totalSets ? Math.round((completed / totalSets) * 100) : 0;
-  document.getElementById("dayProgressText").textContent = `${pct}%`;
-}
-
-function bindStaticEvents() {
-  // Intensity Mode Toggle (Week 1 vs Week 2+)
-  const toggleBtn = document.getElementById("intensityToggle");
-  const modeLabel = document.getElementById("modeLabel");
-
-  toggleBtn.addEventListener("click", () => {
-    state.savageMode = !state.savageMode;
-    toggleBtn.classList.toggle("active", state.savageMode);
-    modeLabel.textContent = state.savageMode ? "WEEK 2+ SAVAGE" : "WEEK 1 BASE";
-    renderCurrentDay();
-  });
-
-  // Phase Filter Tabs
-  document.querySelectorAll(".phase-tab").forEach(tab => {
-    tab.addEventListener("click", () => {
-      document.querySelectorAll(".phase-tab").forEach(t => t.classList.remove("active"));
-      tab.classList.add("active");
-      state.selectedPhase = tab.dataset.phase;
-      renderCurrentDay();
-    });
-  });
-
-  // Floating Rest Timer Buttons
-  document.querySelectorAll(".timer-btn[data-sec]").forEach(btn => {
-    btn.addEventListener("click", () => startRestTimer(Number(btn.dataset.sec)));
-  });
-
-  document.getElementById("timerStopBtn").addEventListener("click", stopRestTimer);
-}
-
-function startRestTimer(seconds) {
-  clearInterval(timerInterval);
-  remainingSeconds = seconds;
-  const pulse = document.getElementById("timerPulse");
-  pulse.classList.add("running");
-  updateTimerUI();
-
-  timerInterval = setInterval(() => {
-    remainingSeconds--;
-    updateTimerUI();
-    if (remainingSeconds <= 0) {
-      clearInterval(timerInterval);
-      pulse.classList.remove("running");
-      playBeep();
-    }
-  }, 1000);
-}
-
-function stopRestTimer() {
-  clearInterval(timerInterval);
-  remainingSeconds = 0;
-  document.getElementById("timerPulse").classList.remove("running");
-  updateTimerUI();
-}
-
-function updateTimerUI() {
-  const mins = String(Math.floor(remainingSeconds / 60)).padStart(2, "0");
-  const secs = String(remainingSeconds % 60).padStart(2, "0");
-  document.getElementById("timerClock").textContent = `${mins}:${secs}`;
-}
-
-function playBeep() {
+function readJSON(key, fallback) {
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    [0, 0.22].forEach(delay => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(880, ctx.currentTime + delay);
-      gain.gain.setValueAtTime(0.18, ctx.currentTime + delay);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.18);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(ctx.currentTime + delay);
-      osc.stop(ctx.currentTime + delay + 0.18);
-    });
-  } catch (e) {
-    // AudioContext blocked if no prior user gesture
+    const raw = localStorage.getItem(key);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw);
+    return parsed == null ? fallback : parsed;
+  } catch (err) {
+    return fallback;
   }
 }
 
+function writeJSON(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (err) {
+    // Private mode can block storage.
+  }
+}
+
+function esc(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function dayByNumber(n) {
+  return WORKOUT_DAYS.find(d => d.dayNumber === n);
+}
+
+function queueFor(dayObj) {
+  return ["phase1", "phase2", "phase3", "phase4"].flatMap(pk =>
+    (dayObj.phases[pk] || []).map(ex => ({
+      ...ex,
+      phase: pk,
+      key: `d${dayObj.dayNumber}_${ex.id}`
+    }))
+  );
+}
+
+function formatClock(ms) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+function buzz(pattern) {
+  try {
+    if (navigator.vibrate) navigator.vibrate(pattern);
+  } catch (err) {
+    // Optional.
+  }
+}
+
+let state = {
+  view: "home",
+  selectedDay: todayNumber(),
+  savageMode: readJSON("protocol90_mode", "savage") !== "base",
+  logs: readJSON("protocol90_logs", {}),
+  session: readJSON("protocol90_session", null)
+};
+
+let clockTimer = null;
+let wakeLock = null;
+let cueOpen = false;
+
+function persist() {
+  writeJSON("protocol90_logs", state.logs);
+  writeJSON("protocol90_session", state.session);
+  writeJSON("protocol90_mode", state.savageMode ? "savage" : "base");
+}
+
+function applyTheme() {
+  document.body.classList.toggle("is-savage", state.savageMode);
+  document.body.classList.toggle("is-base", !state.savageMode);
+}
+
+function dayDone(dayObj) {
+  const queue = queueFor(dayObj);
+  if (!queue.length) return false;
+  return queue.every(ex => state.logs[ex.key]?.completedAt);
+}
+
+function dayProgress(dayObj) {
+  const queue = queueFor(dayObj);
+  const done = queue.filter(ex => state.logs[ex.key]?.completedAt).length;
+  return { done, total: queue.length };
+}
+
+async function keepAwake(on) {
+  try {
+    if (on && navigator.wakeLock) {
+      wakeLock = await navigator.wakeLock.request("screen");
+    } else if (wakeLock) {
+      await wakeLock.release();
+      wakeLock = null;
+    }
+  } catch (err) {
+    wakeLock = null;
+  }
+}
+
+function stopClock() {
+  clearInterval(clockTimer);
+  clockTimer = null;
+}
+
+function liveElapsed() {
+  const session = state.session;
+  if (!session) return 0;
+  if (session.status === "working" && session.exerciseStartedAt) {
+    return session.elapsedMs + (Date.now() - session.exerciseStartedAt);
+  }
+  return session.elapsedMs || 0;
+}
+
+function render() {
+  applyTheme();
+  const stage = document.getElementById("stage");
+  if (state.view === "session") stage.innerHTML = renderSession();
+  else if (state.view === "debrief") stage.innerHTML = renderDebrief();
+  else if (state.view === "done") stage.innerHTML = renderDone();
+  else stage.innerHTML = renderHome();
+  bindView();
+}
+
+function renderHome() {
+  const day = dayByNumber(state.selectedDay);
+  const today = todayNumber();
+  const queue = queueFor(day);
+  const progress = dayProgress(day);
+  const isToday = day.dayNumber === today;
+  const session = state.session;
+  const canResume = session && session.day === day.dayNumber && session.status !== "done" && session.index < queue.length;
+  const media = queue[0]?.img || "";
+
+  return `
+    <section class="view view-home">
+      <header class="chrome">
+        <div class="mark">PROTOCOL <span>90</span></div>
+        <button type="button" class="mode-pill${state.savageMode ? " is-on" : ""}" id="modeBtn">
+          ${state.savageMode ? "SAVAGE" : "BASE"}
+          <span class="mode-dot"></span>
+        </button>
+      </header>
+      <div class="home-body">
+        <div class="home-media" style="background-image:url('${esc(media)}')"></div>
+        <div class="home-copy">
+          <div class="kicker">${isToday ? "Today" : "Selected"} · ${DAY_NAMES[day.dayNumber]}</div>
+          <h1>${esc(CHIP_TITLES[day.dayNumber])}</h1>
+          <p class="lede">${esc(day.focus)}</p>
+          <p class="blurb">${esc(day.summary)}</p>
+          <div class="stat-row">
+            <div class="stat"><b>${queue.length}</b><span>MOVEMENTS</span></div>
+            <div class="stat"><b>90</b><span>MINUTES</span></div>
+            <div class="stat"><b>${progress.done}/${progress.total}</b><span>LOGGED</span></div>
+          </div>
+        </div>
+      </div>
+      <footer class="home-foot">
+        <nav class="day-rail" aria-label="Week">
+          ${WORKOUT_DAYS.map(d => `
+            <button type="button" class="day-dot${d.dayNumber === day.dayNumber ? " is-on" : ""}${d.dayNumber === today ? " is-today" : ""}${dayDone(d) ? " is-done" : ""}" data-day="${d.dayNumber}">
+              <small>${String(d.dayNumber).padStart(2, "0")}</small>
+              <b>${d.shortDay}</b>
+            </button>
+          `).join("")}
+        </nav>
+        ${canResume ? `<div class="resume-banner">Session waiting at movement ${session.index + 1}</div>` : ""}
+        <button type="button" class="primary" id="startBtn">${canResume ? "Continue session" : isToday ? "Start today" : `Start ${CHIP_TITLES[day.dayNumber]}`}</button>
+        ${progress.done && !canResume ? `<button type="button" class="ghost-link" id="resetDayBtn">Clear this day’s notes</button>` : ""}
+      </footer>
+    </section>
+  `;
+}
+
+function renderSession() {
+  const session = state.session;
+  const day = dayByNumber(session.day);
+  const queue = queueFor(day);
+  const ex = queue[session.index];
+  const next = queue[session.index + 1];
+  const live = session.status === "working";
+  const meta = PHASE_META[ex.phase];
+
+  return `
+    <section class="view session">
+      <div class="session-bg" style="background-image:url('${esc(ex.img)}')"></div>
+      <div class="session-top">
+        <button type="button" class="icon-btn" id="exitBtn" aria-label="Leave session">✕</button>
+        <div class="session-count">${String(session.index + 1).padStart(2, "0")} / ${String(queue.length).padStart(2, "0")}</div>
+        <div class="session-count">${esc(CHIP_TITLES[day.dayNumber])}</div>
+      </div>
+      <div class="session-track"><i style="width:${((session.index) / queue.length) * 100}%"></i></div>
+      <div class="session-main">
+        <div>
+          <div class="phase-line">${esc(meta.title)}</div>
+          <div class="ex-code">${esc(ex.code)}</div>
+          <h2>${esc(ex.name)}</h2>
+          <div class="muscle">${esc(ex.muscle)}</div>
+        </div>
+        <div>
+          <div class="clock-block">
+            <div class="clock-label">${live ? "LIVE" : "READY"}</div>
+            <div class="clock${live ? " is-live" : ""}" id="workClock">${formatClock(liveElapsed())}</div>
+          </div>
+          <div class="rx">
+            <div><span>WORK</span><b>${esc(ex.sets)} × ${esc(ex.reps)}</b></div>
+            <div><span>TEMPO</span><b>${esc(ex.tempo)}</b></div>
+            <div><span>REST</span><b>${ex.rest > 0 ? `${esc(ex.rest)}s` : "Cont."}</b></div>
+          </div>
+          <p class="apt"><em>APT LOCK</em>${esc(ex.aptCue)}</p>
+          <button type="button" class="cue-toggle" id="cueBtn">${cueOpen ? "Hide coaching" : "Coaching + finisher"}</button>
+          ${cueOpen ? `<div class="cue-panel">${esc(ex.directive)} ${state.savageMode ? esc(ex.intensifier) : "Week 1: stop 1–2 reps shy of failure. Save intensifiers for week 2."}</div>` : ""}
+        </div>
+      </div>
+      <footer class="session-foot">
+        <div class="up-next">
+          <span>Up next</span>
+          <strong>${next ? esc(next.name) : "Session close"}</strong>
+        </div>
+        <button type="button" class="primary${live ? " danger" : ""}" id="workBtn">${live ? "Stop" : "Start"}</button>
+      </footer>
+    </section>
+  `;
+}
+
+function renderDebrief() {
+  const session = state.session;
+  const day = dayByNumber(session.day);
+  const queue = queueFor(day);
+  const ex = queue[session.index];
+  const next = queue[session.index + 1];
+  const draft = session.draft || {};
+
+  return `
+    <section class="view debrief">
+      <div class="debrief-inner">
+        <div class="debrief-ex">${esc(ex.code)} · ${esc(ex.name)}</div>
+        <h2>How did that go?</h2>
+        <div class="stat-row">
+          <div class="stat"><b>${formatClock(session.elapsedMs || 0)}</b><span>WORKED</span></div>
+          <div class="stat"><b>${esc(ex.sets)} × ${esc(ex.reps)}</b><span>PRESCRIPTION</span></div>
+        </div>
+        <div class="felt">
+          ${FEELINGS.map(feel => `<button type="button" class="chip${draft.feeling === feel ? " is-on" : ""}" data-feel="${esc(feel)}">${esc(feel)}</button>`).join("")}
+        </div>
+        <label class="field">
+          <span>Load / pin</span>
+          <input id="loadInput" type="text" inputmode="decimal" enterkeyhint="done" autocomplete="off" placeholder="e.g. 32 kg" value="${esc(draft.load || "")}" />
+        </label>
+        <div class="pr-row">
+          <span>Mark a PR</span>
+          <button type="button" class="switch${draft.pr ? " is-on" : ""}" id="prBtn" aria-pressed="${draft.pr ? "true" : "false"}"><i></i></button>
+        </div>
+        <label class="field">
+          <span>Thoughts</span>
+          <textarea id="notesInput" placeholder="What moved, what broke, what to chase next time.">${esc(draft.notes || "")}</textarea>
+        </label>
+        <div class="next-card">
+          <small>Queued</small>
+          <strong>${next ? esc(next.name) : "Close the session"}</strong>
+        </div>
+        <button type="button" class="primary" id="saveNextBtn">${next ? "Save & next" : "Save & finish"}</button>
+      </div>
+    </section>
+  `;
+}
+
+function renderDone() {
+  const session = state.session;
+  const day = dayByNumber(session.day);
+  const queue = queueFor(day);
+  const notes = queue.map(ex => state.logs[ex.key]).filter(log => log && (log.notes || log.pr || log.feeling));
+  const prs = notes.filter(log => log.pr).length;
+  const totalMs = queue.reduce((sum, ex) => sum + (state.logs[ex.key]?.durationSec || 0) * 1000, 0);
+
+  return `
+    <section class="view done">
+      <div class="done-inner">
+        <div class="kicker">${DAY_NAMES[day.dayNumber]} · closed</div>
+        <h2>That was ${esc(CHIP_TITLES[day.dayNumber])}.</h2>
+        <div class="done-stats">
+          <div class="stat"><b>${queue.length}</b><span>MOVEMENTS</span></div>
+          <div class="stat"><b>${formatClock(totalMs)}</b><span>WORK CLOCK</span></div>
+          <div class="stat"><b>${prs}</b><span>PRS</span></div>
+        </div>
+        <div class="note-list">
+          ${notes.slice(-4).map(log => `
+            <article>
+              <b>${esc(log.name)}${log.pr ? " · PR" : ""}</b>
+              <p>${esc(log.notes || log.feeling || "Logged.")}</p>
+            </article>
+          `).join("")}
+        </div>
+        <button type="button" class="primary" id="homeBtn">Back to today</button>
+      </div>
+    </section>
+  `;
+}
+
+function bindView() {
+  if (state.view === "home") bindHome();
+  if (state.view === "session") bindSession();
+  if (state.view === "debrief") bindDebrief();
+  if (state.view === "done") bindDone();
+}
+
+function bindHome() {
+  document.getElementById("modeBtn").addEventListener("click", () => {
+    state.savageMode = !state.savageMode;
+    persist();
+    render();
+  });
+  document.querySelectorAll(".day-dot").forEach(btn => {
+    btn.addEventListener("click", () => {
+      state.selectedDay = Number(btn.dataset.day);
+      render();
+    });
+  });
+  document.getElementById("startBtn").addEventListener("click", startOrResume);
+  const reset = document.getElementById("resetDayBtn");
+  if (reset) {
+    reset.addEventListener("click", () => {
+      const day = dayByNumber(state.selectedDay);
+      if (!window.confirm("Clear notes and checkmarks for this day?")) return;
+      queueFor(day).forEach(ex => delete state.logs[ex.key]);
+      if (state.session?.day === day.dayNumber) state.session = null;
+      persist();
+      render();
+    });
+  }
+}
+
+function startOrResume() {
+  const day = dayByNumber(state.selectedDay);
+  const queue = queueFor(day);
+  const existing = state.session;
+  if (existing && existing.day !== day.dayNumber && existing.status !== "done") {
+    if (!window.confirm(`Leave the ${CHIP_TITLES[existing.day]} session and start ${CHIP_TITLES[day.dayNumber]}?`)) return;
+  }
+  if (existing && existing.day === day.dayNumber && existing.status !== "done" && existing.index < queue.length) {
+    state.view = existing.status === "debrief" ? "debrief" : "session";
+    if (state.session.status === "working") startClockLoop();
+    render();
+    return;
+  }
+  const firstOpen = queue.findIndex(ex => !state.logs[ex.key]?.completedAt);
+  state.session = {
+    day: day.dayNumber,
+    index: firstOpen === -1 ? 0 : firstOpen,
+    status: "ready",
+    startedAt: Date.now(),
+    exerciseStartedAt: null,
+    elapsedMs: 0,
+    draft: {}
+  };
+  state.view = "session";
+  cueOpen = false;
+  persist();
+  render();
+}
+
+function bindSession() {
+  document.getElementById("exitBtn").addEventListener("click", () => {
+    if (state.session?.status === "working") {
+      state.session.elapsedMs = liveElapsed();
+      state.session.exerciseStartedAt = null;
+      state.session.status = "ready";
+    }
+    stopClock();
+    keepAwake(false);
+    persist();
+    state.view = "home";
+    render();
+  });
+  document.getElementById("cueBtn").addEventListener("click", () => {
+    cueOpen = !cueOpen;
+    render();
+  });
+  document.getElementById("workBtn").addEventListener("click", () => {
+    if (state.session.status === "working") stopExercise();
+    else startExercise();
+  });
+  if (state.session.status === "working") startClockLoop();
+}
+
+function startExercise() {
+  state.session.status = "working";
+  state.session.exerciseStartedAt = Date.now();
+  persist();
+  keepAwake(true);
+  buzz(16);
+  render();
+}
+
+function stopExercise() {
+  state.session.elapsedMs = liveElapsed();
+  state.session.exerciseStartedAt = null;
+  state.session.status = "debrief";
+  state.session.draft = state.session.draft || {};
+  stopClock();
+  keepAwake(false);
+  buzz([20, 40, 30]);
+  persist();
+  state.view = "debrief";
+  render();
+}
+
+function startClockLoop() {
+  stopClock();
+  clockTimer = setInterval(() => {
+    const clock = document.getElementById("workClock");
+    if (clock) clock.textContent = formatClock(liveElapsed());
+  }, 250);
+}
+
+function bindDebrief() {
+  document.querySelectorAll("[data-feel]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      state.session.draft = state.session.draft || {};
+      state.session.draft.feeling = btn.dataset.feel;
+      persist();
+      render();
+    });
+  });
+  const load = document.getElementById("loadInput");
+  const notes = document.getElementById("notesInput");
+  load.addEventListener("input", () => {
+    state.session.draft = state.session.draft || {};
+    state.session.draft.load = load.value;
+    persist();
+  });
+  notes.addEventListener("input", () => {
+    state.session.draft = state.session.draft || {};
+    state.session.draft.notes = notes.value;
+    persist();
+  });
+  document.getElementById("prBtn").addEventListener("click", () => {
+    state.session.draft = state.session.draft || {};
+    state.session.draft.pr = !state.session.draft.pr;
+    persist();
+    render();
+  });
+  document.getElementById("saveNextBtn").addEventListener("click", saveAndAdvance);
+}
+
+function saveAndAdvance() {
+  const session = state.session;
+  const day = dayByNumber(session.day);
+  const queue = queueFor(day);
+  const ex = queue[session.index];
+  const draft = session.draft || {};
+  state.logs[ex.key] = {
+    name: ex.name,
+    feeling: draft.feeling || "",
+    notes: draft.notes || "",
+    load: draft.load || "",
+    pr: !!draft.pr,
+    durationSec: Math.round((session.elapsedMs || 0) / 1000),
+    completedAt: new Date().toISOString()
+  };
+  session.index += 1;
+  session.elapsedMs = 0;
+  session.exerciseStartedAt = null;
+  session.draft = {};
+  cueOpen = false;
+  if (session.index >= queue.length) {
+    session.status = "done";
+    state.view = "done";
+  } else {
+    session.status = "ready";
+    state.view = "session";
+  }
+  persist();
+  render();
+}
+
+function bindDone() {
+  document.getElementById("homeBtn").addEventListener("click", () => {
+    state.session = null;
+    state.selectedDay = todayNumber();
+    state.view = "home";
+    persist();
+    render();
+  });
+}
+
+function initApp() {
+  state.selectedDay = todayNumber();
+  if (state.session && state.session.status === "working") {
+    state.session.elapsedMs = liveElapsed();
+    state.session.exerciseStartedAt = null;
+    state.session.status = "ready";
+    persist();
+  }
+  render();
+}
+
 document.addEventListener("DOMContentLoaded", initApp);
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden && state.session?.status === "working") {
+    state.session.elapsedMs = liveElapsed();
+    state.session.exerciseStartedAt = Date.now();
+    persist();
+  }
+});
